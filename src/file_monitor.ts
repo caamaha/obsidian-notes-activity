@@ -87,6 +87,14 @@ export class FileMonitor {
         existingRecord.charCount = charCount;
 
         this.dataStore.updateFileRecord(existingRecord);
+        this.dataStore.addEventRecord({
+            srcPath: file.path,
+            eventType: 'u',
+            dstPath: '',
+            charCount: charCount,
+            wordCount: wordCount,
+            timestamp: new Date(file.stat.mtime)
+        });
     }
 
     private async addRecordFromFile(file: TFile) {
@@ -96,7 +104,7 @@ export class FileMonitor {
         const newRecord = new FileRecord({
             filePath: file.path,
             fileName: file.name,
-            fileType: file.path.split('.').pop() || '',
+            fileType: file.extension,
             wordCount: wordCount,
             charCount: charCount,
             fileSize: file.stat.size,
@@ -107,10 +115,26 @@ export class FileMonitor {
         });
 
         this.dataStore.updateFileRecord(newRecord);
+        this.dataStore.addEventRecord({
+            srcPath: file.path,
+            eventType: 'u',
+            dstPath: '',
+            charCount: charCount,
+            wordCount: wordCount,
+            timestamp: new Date(file.stat.mtime)
+        });
     }
 
     private markRecordAsDeleted(record: FileRecord) {
         record.fileExists = false;
         this.dataStore.updateFileRecord(record);
+        this.dataStore.addEventRecord({
+            srcPath: record.filePath,
+            eventType: 'd',
+            dstPath: '',
+            charCount: 0,
+            wordCount: 0,
+            timestamp: new Date()
+        });
     }
 }

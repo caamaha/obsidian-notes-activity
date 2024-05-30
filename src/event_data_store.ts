@@ -1,26 +1,30 @@
 // event_data_store.ts
+import { Vault, TFile } from 'obsidian';
 import { FileRecord } from './file_monitor';
+import { NoteEvent } from './event_data_types';
 import Database from '@aidenlx/better-sqlite3';
-import * as fs from 'fs';
 
 const binaryPath = "C:\\Users\\Administrator\\AppData\\Roaming\\obsidian\\better-sqlite3-8.0.1-mod.1.node";
 
 export class EventDataStore {
+    private vault: Vault;
     private db: any;
     public storeRecords: FileRecord[] = [];
 
-    constructor(dbPath: string) {
+    constructor(vault: Vault, dbPath: string) {
+        this.vault = vault;
+
         console.log('Database initialized at:', dbPath);
         
-        if (!fs.existsSync(dbPath)) {
-            // 如果不存在，创建一个新的数据库文件
-            this.db = new Database(dbPath, { nativeBinding: binaryPath, fileMustExist: false });
-            this.createTables();
-        } else {
-            // 如果存在，直接打开数据库
-            this.db = new Database(dbPath, { nativeBinding: binaryPath, fileMustExist: true });
-            this.loadFileRecords();
-        }
+        // 打开或创建数据库
+        this.db = new Database(dbPath, { nativeBinding: binaryPath, fileMustExist: false });
+        this.createTables();
+        this.loadFileRecords();
+    }
+
+    close() {
+        this.db.close();
+        console.log('Database connection closed.');
     }
 
     private createTables() {
@@ -40,6 +44,20 @@ export class EventDataStore {
             );
         `;
         this.db.prepare(createFileRecordsTable).run();
+
+        // 创建 note_events 表
+        const createNoteEventsTable = `
+            CREATE TABLE IF NOT EXISTS note_events (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                srcPath TEXT NOT NULL,
+                eventType TEXT NOT NULL,
+                dstPath TEXT NOT NULL,
+                charCount INTEGER,
+                wordCount INTEGER,
+                timestamp DATETIME NOT NULL
+            );
+        `;
+        this.db.prepare(createNoteEventsTable).run();
     }
 
     // 从数据库加载文件记录
@@ -62,6 +80,8 @@ export class EventDataStore {
     // 创建或更新数据库中的记录
     updateFileRecord(record: FileRecord) {
         const existingRecord = this.storeRecords.find(r => r.filePath === record.filePath);
+
+        console.log('Updating record:', record.filePath, existingRecord ? 'exists' : 'new')
 
         if (existingRecord) {
             // Update both in database and memory
@@ -92,8 +112,32 @@ export class EventDataStore {
         }
     }
 
-    close() {
-        this.db.close();
-        console.log('Database connection closed.');
+    public addEventRecord(event: NoteEvent): void {
+        const existingRecord = this.storeRecords.find(r => r.filePath === event.srcPath);
+
+        if (!existingRecord) {
+            const file = this.vault.getAbstractFileByPath(event.srcPath);
+            if (file && file instanceof TFile) {
+                this.updateFileRecord(new FileRecord({
+                    filePath: event.srcPath,
+                    fileName: file.name,
+                    fileType: file.extension,
+                    wordCount: event.wordCount,
+                    charCount: event.charCount,
+                    fileSize: file.stat.size,
+                    fileExists: true,
+                    lastModified: new Date(file.stat.mtime),
+                    createdAt: new Date(file.stat.ctime),
+                    lastChecked: new Date()
+                }));
+            }
+        }
+
+        const insertSql = `
+            INSERT INTO note_events (srcPath, eventType, dstPath, charCount, wordCount, timestamp)
+            VALUES (?, ?, ?, ?, ?, ?);
+        `;
+        const stmt = this.db.prepare(insertSql);
+        stmt.run(event.srcPath, event.eventType, event.dstPath, event.charCount, event.wordCount, event.timestamp.toISOString());
     }
 }

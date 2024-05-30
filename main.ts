@@ -3,8 +3,10 @@ import { App, Plugin } from 'obsidian';
 import { EventDataStore } from './src/event_data_store';
 import { EventTracker } from './src/event_tracker';
 import { FileMonitor } from './src/file_monitor';
+import { EventManager } from './src/event_manager';
 
 export default class NoteActivityPlugin extends Plugin {
+    private eventManager: EventManager;
     private eventDataStore: EventDataStore;
     private eventTracker: EventTracker;
     private fileMonitor: FileMonitor;
@@ -14,7 +16,8 @@ export default class NoteActivityPlugin extends Plugin {
 
         this.initDatabase();
 
-        this.eventTracker = new EventTracker(this.app.workspace);
+        this.eventManager = new EventManager(this.app.vault, this.eventDataStore);
+        this.eventTracker = new EventTracker(this.app.workspace, this.eventManager);
         this.fileMonitor = new FileMonitor(this.app.vault, this.eventDataStore);
 
         this.app.workspace.onLayoutReady(async () => {
@@ -33,6 +36,6 @@ export default class NoteActivityPlugin extends Plugin {
 
     private initDatabase() {
         const dbPath = (this.app.vault.adapter as any).basePath + "/.obsidian/note_activity.db";
-        this.eventDataStore = new EventDataStore(dbPath);
+        this.eventDataStore = new EventDataStore(this.app.vault, dbPath);
     }
 }
