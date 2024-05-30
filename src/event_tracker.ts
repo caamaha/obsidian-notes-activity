@@ -1,8 +1,14 @@
 // src/event_tracker.ts
-import { Plugin } from 'obsidian';
+import { Workspace } from 'obsidian';
 import { EditorView, ViewUpdate } from '@codemirror/view';
 
 export class EventTracker {
+    private workspace: Workspace;
+
+    constructor(workspace: Workspace) {
+        this.workspace = workspace;
+    }
+
     // 返回一个编辑器更新监听器
     getUpdateListener() {
         return EditorView.updateListener.of((update: ViewUpdate) => {
@@ -11,6 +17,9 @@ export class EventTracker {
     }
 
     private handleEditorUpdate(update: ViewUpdate) {
+        // 获取当前活跃文件的路径
+        let filePath = this.workspace.getActiveFile()?.path ?? "No active file";
+        
         const changes = update.changes;
         let added = 0;
         let removed = 0;
@@ -28,6 +37,7 @@ export class EventTracker {
             console.log(`Added characters: ${added}, Removed characters: ${removed}`);
             console.log(`Added text: "${addedText}"`);
             console.log(`Removed text: "${removedText}"`);
+            console.log(`File Path: ${filePath}`);
         }
     }
 }
