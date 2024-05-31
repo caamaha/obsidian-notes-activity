@@ -18,7 +18,7 @@ export default class NoteActivityPlugin extends Plugin {
 
         this.eventManager = new EventManager(this.app.vault, this.eventDataStore);
         this.eventTracker = new EventTracker(this.app.workspace, this.eventManager);
-        this.fileMonitor = new FileMonitor(this.app.vault, this.eventDataStore);
+        this.fileMonitor = new FileMonitor(this.app.vault, this.eventDataStore, this.eventManager);
 
         this.app.workspace.onLayoutReady(async () => {
             await this.fileMonitor.init();

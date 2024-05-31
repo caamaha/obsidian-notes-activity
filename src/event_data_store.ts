@@ -1,7 +1,6 @@
 // event_data_store.ts
 import { Vault, TFile } from 'obsidian';
-import { FileRecord } from './file_monitor';
-import { EventRecord } from './record_datatype';
+import { FileRecord, EventRecord, EventType } from './record_datatype';
 import { TextAnalyzer } from './text_analyzer';
 import Database from '@aidenlx/better-sqlite3';
 
@@ -10,7 +9,7 @@ const binaryPath = "C:\\Users\\Administrator\\AppData\\Roaming\\obsidian\\better
 export class EventDataStore {
     private vault: Vault;
     private db: any;
-    public storeRecords: FileRecord[] = [];
+    public fileRecords: FileRecord[] = [];
 
     constructor(vault: Vault, dbPath: string) {
         this.vault = vault;
@@ -29,14 +28,15 @@ export class EventDataStore {
     }
 
     private createTables() {
+        // 创建 fileRecords 表
         const createFileRecordsTable = `
-            CREATE TABLE IF NOT EXISTS file_records (
+            CREATE TABLE IF NOT EXISTS fileRecords (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 filePath TEXT NOT NULL UNIQUE,
                 fileName TEXT NOT NULL,
                 fileType TEXT NOT NULL,
-                wordCount INTEGER,
                 charCount INTEGER,
+                wordCount INTEGER,
                 fileSize INTEGER,
                 fileExists INTEGER,
                 lastModified INTEGER,
@@ -46,17 +46,17 @@ export class EventDataStore {
         `;
         this.db.prepare(createFileRecordsTable).run();
 
-        // 创建 note_events 表
+        // 创建 eventRecords 表
         const createNoteEventsTable = `
-            CREATE TABLE IF NOT EXISTS note_events (
+            CREATE TABLE IF NOT EXISTS eventRecords (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 fileId INTEGER NOT NULL,
                 eventType TEXT NOT NULL,
-                dstPath TEXT,
+                filePath TEXT,
                 charCount INTEGER,
                 wordCount INTEGER,
                 timestamp INTEGER NOT NULL,
-                FOREIGN KEY (fileId) REFERENCES file_records(id)
+                FOREIGN KEY (fileId) REFERENCES fileRecords(id)
             );
         `;
         this.db.prepare(createNoteEventsTable).run();
@@ -64,102 +64,164 @@ export class EventDataStore {
 
     // 从数据库加载文件记录
     private loadFileRecords() {
-        const query = 'SELECT * FROM file_records;';
+        const query = 'SELECT * FROM fileRecords WHERE fileExists = 1;';
         const rows = this.db.prepare(query).all();
-        this.storeRecords = rows.map((row: any) => new FileRecord(row));
+        this.fileRecords = rows.map((row: any) => new FileRecord(row));
     }
 
-    // 创建或更新内存中的记录
-    private updateRecordInMemory(record: FileRecord) {
-        const index = this.storeRecords.findIndex(r => r.filePath === record.filePath);
-        if (index >= 0) {
-            this.storeRecords[index] = record;
-        } else {
-            this.storeRecords.push(record);
+    public handleFileOps(fileRecord: FileRecord, eventType: EventType): void {
+        switch (eventType) {
+            case 'c': // 创建
+            case 'u': // 更新
+                this.updateFileRecord(fileRecord);
+                this.addEventRecord_FileOps(fileRecord, eventType);
+                break;
+            case 'd': // 删除
+                this.deleteFileRecord(fileRecord);
+                this.addEventRecord_FileOps(fileRecord, eventType);
+                break;
+            case 'm': // 移动
+                // this.moveFileRecord(event);
+                break;
+            default:
+                throw new Error("Unsupported file operation");
         }
     }
 
-    // 创建或更新数据库中的记录
-    updateFileRecord(record: FileRecord) {
-        const existingRecord = this.storeRecords.find(r => r.filePath === record.filePath);
-
-        console.log('Updating record:', record.filePath, existingRecord ? 'exists' : 'new')
-
+    private updateFileRecord(record: FileRecord): void {
+        // 创建或更新数据库记录
+        const existingRecord = this.fileRecords.find(r => r.filePath === record.filePath);
         if (existingRecord) {
-            // Update both in database and memory
+            record.id = existingRecord.id;
+            // Update existing record in both database and memory
             const queryUpdate = `
-                UPDATE file_records SET
-                fileName = ?, fileType = ?, wordCount = ?, charCount = ?, fileSize = ?, fileExists = ?,
+                UPDATE fileRecords SET
+                filePath = ?, fileName = ?, fileType = ?, charCount = ?, wordCount = ?, fileSize = ?, fileExists = ?,
                 lastModified = ?, createdAt = ?, lastChecked = ?
-                WHERE filePath = ?;
+                WHERE id = ?;
             `;
             this.db.prepare(queryUpdate).run(
-                record.fileName, record.fileType, record.wordCount, record.charCount, record.fileSize, record.fileExists ? 1 : 0,
+                record.filePath, record.fileName, record.fileType, record.charCount, record.wordCount, record.fileSize, record.fileExists ? 1 : 0,
                 record.lastModified, record.createdAt, new Date().getTime(),
-                record.filePath
+                record.id
             );
-            this.updateRecordInMemory(record);
-        } else {
+        }
+        else
+        {
             // Insert new record into both database and memory
             const queryInsert = `
-                INSERT INTO file_records (filePath, fileName, fileType, wordCount, charCount, fileSize, fileExists, lastModified, createdAt, lastChecked)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+            INSERT INTO fileRecords (filePath, fileName, fileType, charCount, wordCount, fileSize, fileExists, lastModified, createdAt, lastChecked)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
             `;
             this.db.prepare(queryInsert).run(
-                record.filePath, record.fileName, record.fileType, record.wordCount, record.charCount, record.fileSize, record.fileExists ? 1 : 0,
+                record.filePath, record.fileName, record.fileType, record.charCount, record.wordCount, record.fileSize, record.fileExists ? 1 : 0,
                 record.lastModified, record.createdAt, new Date().getTime()
             );
             record.id = this.db.lastInsertRowid;
-            this.updateRecordInMemory(record);
+        }
+
+        // 更新内存记录
+        const index = this.fileRecords.findIndex(r => r.id === record.id);
+        if (index >= 0) {
+            this.fileRecords[index] = record;
+        } else {
+            this.fileRecords.push(record);
         }
     }
 
-    public addEventRecord(event: EventRecord): void {
-        const existingRecord = this.storeRecords.find(r => r.id === event.fileId);
+    private deleteFileRecord(record: FileRecord): void {
+        const index = this.fileRecords.findIndex(r => r.filePath === record.filePath);
+        console.log(record.filePath);
+        if (index >= 0)
+        {
+            record.id = this.fileRecords[index].id;
 
-        if (!existingRecord && event.eventType === 'c') {
-            const file = this.vault.getAbstractFileByPath(event.dstPath);
-            if (file && file instanceof TFile) {
-                this.updateFileRecord(new FileRecord({
-                    filePath: event.fileId,
-                    fileName: file.name,
-                    fileType: file.extension,
-                    wordCount: event.wordCount,
-                    charCount: event.charCount,
-                    fileSize: file.stat.size,
-                    fileExists: true,
-                    lastModified: file.stat.mtime,
-                    createdAt: file.stat.ctime,
-                    lastChecked: new Date().getTime()
-                }));
-            }
+            // 标记数据库文件记录为删除状态
+            const queryUpdate = `
+            UPDATE fileRecords SET
+            charCount = ?, wordCount = ?, fileSize = ?, fileExists = ?,
+            lastModified = ?, lastChecked = ?
+            WHERE id = ?;
+            `;
+            const currTime = new Date().getTime();
+            this.db.prepare(queryUpdate).run(
+                0, 0, 0, 0, currTime, currTime, record.id
+            );
+
+            // 删除内存记录
+            this.fileRecords.splice(index, 1);
         }
-
-        const insertSql = `
-            INSERT INTO note_events (fileId, eventType, dstPath, charCount, wordCount, timestamp)
-            VALUES (?, ?, ?, ?, ?, ?);
-        `;
-        const stmt = this.db.prepare(insertSql);
-        stmt.run(event.fileId, event.eventType, event.dstPath, event.charCount, event.wordCount, event.timestamp);
     }
+
+    private moveFileRecord(event: EventRecord): void {
+        throw new Error("Method not implemented.");
+    //     const updateSql = `UPDATE file_records SET filePath = ?, lastChecked = ? WHERE id = ?`;
+    //     this.db.prepare(updateSql).run(event.dstPath, new Date().getTime(), event.fileId);
+    }
+
+    public addEventRecord_FileOps(fileRecord: FileRecord, eventType: EventType): void {
+        const query = `SELECT * FROM fileRecords WHERE filePath = ?;`;
+        const record = this.db.prepare(query).get(fileRecord.filePath);
+
+        console.log(record);
+
+        if (record) {
+            const insertSql = `
+                INSERT INTO eventRecords (fileId, eventType, filePath, charCount, wordCount, timestamp)
+                VALUES (?, ?, ?, ?, ?, ?);
+            `;
+            const stmt = this.db.prepare(insertSql);
+            stmt.run(record.id, eventType, record.filePath, record.charCount, record.wordCount, record.lastModified);
+        }
+    }
+
+    // public addEventRecord(event: EventRecord): void {
+    //     const existingRecord = this.fileRecords.find(r => r.id === event.fileId);
+
+    //     if (!existingRecord && event.eventType === 'c') {
+    //         const file = this.vault.getAbstractFileByPath(event.dstPath);
+    //         if (file && file instanceof TFile) {
+    //             this.updateFileRecord(new FileRecord({
+    //                 filePath: event.fileId,
+    //                 fileName: file.name,
+    //                 fileType: file.extension,
+    //                 wordCount: event.wordCount,
+    //                 charCount: event.charCount,
+    //                 fileSize: file.stat.size,
+    //                 fileExists: true,
+    //                 lastModified: file.stat.mtime,
+    //                 createdAt: file.stat.ctime,
+    //                 lastChecked: new Date().getTime()
+    //             }));
+    //         }
+    //     }
+
+    //     const insertSql = `
+    //         INSERT INTO note_events (fileId, eventType, dstPath, charCount, wordCount, timestamp)
+    //         VALUES (?, ?, ?, ?, ?, ?);
+    //     `;
+    //     const stmt = this.db.prepare(insertSql);
+    //     stmt.run(event.fileId, event.eventType, event.dstPath, event.charCount, event.wordCount, event.timestamp);
+    // }
 
     public getFilePathById(fileId: number): string | null {
-        const record = this.storeRecords.find(record => record.id === fileId);
+        const record = this.fileRecords.find(record => record.id === fileId);
         if (record) {
             return record.filePath;
         } else {
+            throw new Error(`File ID ${fileId} not found`);
             return null; // 或者抛出一个错误，如果您希望明确指出查找失败
         }
     }
     
     public getFileIdByPath(filePath: string): number {
-        let record = this.storeRecords.find(r => r.filePath === filePath);
+        let record = this.fileRecords.find(r => r.filePath === filePath);
         if (record) {
             return record.id;    
         }
         else
         {
-            return -1;
+            throw new Error("File not found" + filePath);
         }
     }
 }

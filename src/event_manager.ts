@@ -1,6 +1,6 @@
 // src/event_aggregator.ts
 import { Vault, TFile } from 'obsidian';
-import { EventRecord } from "./record_datatype";
+import { FileRecord, EventRecord, EventType } from "./record_datatype";
 import { EventDataStore } from "./event_data_store";
 import { TextAnalyzer } from "./text_analyzer";
 
@@ -14,6 +14,44 @@ export class EventManager {
         this.vault = vault;
         this.dataStore = dataStore;
         this.modifyTimers = new Map();
+    }
+
+    public handleFileOps(filePath: string, eventType: EventType): void
+    {
+        console.log(`FileOps:`, filePath, eventType);
+        if (eventType === 'c' ||
+            eventType === 'u' ||
+            eventType === 'm')
+        {
+            const file = this.vault.getAbstractFileByPath(filePath) as TFile;
+            if (!file) {
+                console.error(`File not found: ${filePath}`);
+                return;
+            }
+    
+            this.vault.cachedRead(file).then(content => {
+                const { charCount, wordCount } = TextAnalyzer.analyzeText(content);
+                const fileRecord = new FileRecord({
+                    id: 0,
+                    filePath: file.path,
+                    fileName: file.name,
+                    fileType: file.extension,
+                    wordCount: wordCount,
+                    charCount: charCount,
+                    fileSize: file.stat.size,
+                    fileExists: true,
+                    lastModified: file.stat.mtime,
+                    createdAt: file.stat.ctime,
+                    lastChecked: new Date().getTime()
+                });
+                this.dataStore.handleFileOps(fileRecord, eventType);
+            });
+        } else if (eventType === 'd') {
+            const fileRecord = new FileRecord();
+            fileRecord.filePath = filePath;
+            
+            this.dataStore.handleFileOps(fileRecord, eventType);
+        }
     }
 
     public handleUpdateEventByFilePath(filePath: string, timestamp: Date): void {
@@ -55,22 +93,22 @@ export class EventManager {
             return;
         }
 
-        // 处理延时后的笔记修改，如计算字数和词数变化
-        const file = this.vault.getAbstractFileByPath(filePath);
-        if (file && file instanceof TFile && file.extension === 'md') {
-            this.vault.cachedRead(file).then(content => {
-                const { charCount, wordCount } = TextAnalyzer.analyzeText(content);
-                const event: EventRecord = {
-                    fileId: fileId,
-                    dstPath: '',
-                    eventType: 'u',
-                    charCount: charCount,
-                    wordCount: wordCount,
-                    timestamp: timestamp.getTime()
-                };
-                this.dataStore.addEventRecord(event);
-            });
-        }
+        // // 处理延时后的笔记修改，如计算字数和词数变化
+        // const file = this.vault.getAbstractFileByPath(filePath);
+        // if (file && file instanceof TFile && file.extension === 'md') {
+        //     this.vault.cachedRead(file).then(content => {
+        //         const { charCount, wordCount } = TextAnalyzer.analyzeText(content);
+        //         const event: EventRecord = {
+        //             fileId: fileId,
+        //             dstPath: '',
+        //             eventType: 'u',
+        //             charCount: charCount,
+        //             wordCount: wordCount,
+        //             timestamp: timestamp.getTime()
+        //         };
+        //         this.dataStore.addEventRecord(event);
+        //     });
+        // }
 
         // 清除计时器记录
         this.modifyTimers.delete(fileId);
