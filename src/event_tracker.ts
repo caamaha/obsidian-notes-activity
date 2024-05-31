@@ -39,7 +39,7 @@ export class EventTracker {
             // 构建笔记修改事件
             if (changed)
             {
-                this.eventManager.handleUpdateEvent(filePath, new Date());
+                this.eventManager.handleUpdateEventByFilePath(filePath, new Date());
             }
         }
     }

@@ -3,33 +3,7 @@ import { Vault, TFile } from 'obsidian';
 import { TextAnalyzer } from './text_analyzer';
 import { EventDataStore } from './event_data_store';
 
-export class FileRecord {
-    id: number;                 // 唯一标识符，可以用于追踪和更新记录
-    filePath: string;           // 文件的完整路径
-    fileName: string;           // 文件名
-    fileType: string;           // 文件类型（如 .md, .pdf 等）
-    wordCount: number;          // 文件的单词数（适用于文本文件）
-    charCount: number;          // 文件的字符数（适用于文本文件）
-    fileSize: number;           // 文件大小，以字节为单位
-    fileExists: boolean;        // 文件是否存在
-    lastModified: Date;         // 最后修改时间
-    createdAt: Date;            // 文件创建时间
-    lastChecked: Date;          // 最后一次检查（扫描）时间
 
-    constructor(data: any) {
-        this.id = data.id;
-        this.filePath = data.filePath;
-        this.fileName = data.fileName;
-        this.fileType = data.fileType;
-        this.wordCount = data.wordCount;
-        this.charCount = data.charCount;
-        this.fileSize = data.fileSize;
-        this.fileExists = data.fileExists == 1;
-        this.lastModified = new Date(data.lastModified);
-        this.createdAt = new Date(data.createdAt);
-        this.lastChecked = new Date(data.lastChecked);
-    }
-}
 
 export class FileMonitor {
     private vault: Vault;
@@ -56,8 +30,7 @@ export class FileMonitor {
             const record = storedRecordMap.get(file.path);
             if (record) {
                 // 检查文件是否更新过
-                const fileModified = new Date(file.stat.mtime);
-                if (fileModified > record.lastModified) {
+                if (file.stat.mtime > record.lastModified) {
                     // 更新记录
                     await this.updateRecordFromFile(file, record);
                 }
@@ -81,19 +54,19 @@ export class FileMonitor {
 
         existingRecord.fileSize = file.stat.size;
         existingRecord.fileExists = true;
-        existingRecord.lastModified = new Date(file.stat.mtime);
-        existingRecord.lastChecked = new Date();
+        existingRecord.lastModified = file.stat.mtime;
+        existingRecord.lastChecked = new Date().getTime();
         existingRecord.wordCount = wordCount;
         existingRecord.charCount = charCount;
 
         this.dataStore.updateFileRecord(existingRecord);
         this.dataStore.addEventRecord({
-            srcPath: file.path,
+            fileId: file.path,
             eventType: 'u',
             dstPath: '',
             charCount: charCount,
             wordCount: wordCount,
-            timestamp: new Date(file.stat.mtime)
+            timestamp: existingRecord.lastModified
         });
     }
 
@@ -109,19 +82,19 @@ export class FileMonitor {
             charCount: charCount,
             fileSize: file.stat.size,
             fileExists: true,
-            lastModified: new Date(file.stat.mtime),
-            createdAt: new Date(file.stat.ctime),
-            lastChecked: new Date()
+            lastModified: file.stat.mtime,
+            createdAt: file.stat.ctime,
+            lastChecked: new Date().getTime()
         });
 
         this.dataStore.updateFileRecord(newRecord);
         this.dataStore.addEventRecord({
-            srcPath: file.path,
+            fileId: file.path,
             eventType: 'u',
             dstPath: '',
             charCount: charCount,
             wordCount: wordCount,
-            timestamp: new Date(file.stat.mtime)
+            timestamp: file.stat.mtime
         });
     }
 
@@ -129,12 +102,12 @@ export class FileMonitor {
         record.fileExists = false;
         this.dataStore.updateFileRecord(record);
         this.dataStore.addEventRecord({
-            srcPath: record.filePath,
+            fileId: record.filePath,
             eventType: 'd',
             dstPath: '',
             charCount: 0,
             wordCount: 0,
-            timestamp: new Date()
+            timestamp: new Date().getTime()
         });
     }
 }
