@@ -23,4 +23,16 @@ export class EventTracker {
         console.log(oldPath + ' renamed to ' + newPath);
         this.eventManager.handleRenameEventByFilePath(newPath, oldPath);
     }
+
+    public handleFileCreate(path: string): void
+    {
+        console.log(path + ' created');
+        this.eventManager.handleFileOps(path, 'c');
+    }
+
+    public handleFileDelete(path: string): void
+    {
+        console.log(path + ' deleted');
+        this.eventManager.handleFileOps(path, 'd');
+    }
 }

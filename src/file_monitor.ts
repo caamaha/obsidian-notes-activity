@@ -39,16 +39,18 @@ export class FileMonitor {
 
         // 检查和更新当前文件与数据库记录
         for (const file of currentFiles) {
-            const record = storedRecordMap.get(file.path);
-            if (record) {
-                // 检查文件是否更新过
-                if (file.stat.mtime > record.lastModified) {
-                    // 更新记录
-                    this.eventManager.handleFileOps(file.path, 'u');
+            if (file.extension === 'md') {
+                const record = storedRecordMap.get(file.path);
+                if (record) {
+                    // 检查文件是否更新过
+                    if (file.stat.mtime > record.lastModified) {
+                        // 更新记录
+                        this.eventManager.handleFileOps(file.path, 'u');
+                    }
+                } else {
+                    // 新文件，添加记录
+                    this.eventManager.handleFileOps(file.path, 'c');
                 }
-            } else {
-                // 新文件，添加记录
-                this.eventManager.handleFileOps(file.path, 'c');
             }
         }
 

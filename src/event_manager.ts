@@ -28,6 +28,8 @@ export class EventManager {
                 console.error(`File not found: ${filePath}`);
                 return;
             }
+
+            console.log(filePath + ' ' + eventType);
     
             this.vault.cachedRead(file).then(content => {
                 const { charCount, wordCount } = TextAnalyzer.analyzeText(content);
@@ -89,7 +91,7 @@ export class EventManager {
 
         // 处理延时后的笔记修改，如计算字数和词数变化
         const file = this.vault.getAbstractFileByPath(filePath);
-        if (file && file instanceof TFile && file.extension === 'md') {
+        if (file && file instanceof TFile) {
             this.vault.cachedRead(file).then(content => {
                 const { charCount, wordCount } = TextAnalyzer.analyzeText(content);
                 const fileRecord = new FileRecord({
@@ -117,7 +119,6 @@ export class EventManager {
     }
 
     public handleRenameEventByFilePath(newPath: string, oldPath: string): void {
-        console.log("Rename event:", newPath, oldPath);
         const fileId = this.dataStore.getFileIdByPath(oldPath);
         if (fileId != null)
         {

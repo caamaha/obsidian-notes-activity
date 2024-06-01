@@ -109,16 +109,39 @@ export class EventDataStore {
         }
         else
         {
-            // Insert new record into both database and memory
-            const queryInsert = `
-            INSERT INTO fileRecords (filePath, fileName, fileType, charCount, wordCount, fileSize, fileExists, lastModified, createdAt, lastChecked)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
-            `;
-            this.db.prepare(queryInsert).run(
-                record.filePath, record.fileName, record.fileType, record.charCount, record.wordCount, record.fileSize, record.fileExists ? 1 : 0,
-                record.lastModified, record.createdAt, new Date().getTime()
-            );
-            record.id = this.db.lastInsertRowid;
+            // 查询文件记录是否已存在（可能文件之前被删除过）
+            const query = `SELECT * FROM fileRecords WHERE filePath = ?;`;
+            const isFileRecordExists = this.db.prepare(query).get(record.filePath);
+
+            if (isFileRecordExists)
+            {
+                // 更新数据库记录
+                const queryUpdate = `
+                UPDATE fileRecords SET
+                filePath = ?, fileName = ?, fileType = ?, charCount = ?, wordCount = ?, fileSize = ?, fileExists = ?,
+                lastModified = ?, createdAt = ?, lastChecked = ?
+                WHERE filePath = ?;
+                `;
+                this.db.prepare(queryUpdate).run(
+                    record.filePath, record.fileName, record.fileType, record.charCount, record.wordCount, record.fileSize, record.fileExists ? 1 : 0,
+                    record.lastModified, record.createdAt, new Date().getTime(),
+                    record.filePath
+                );
+                record.id = isFileRecordExists.id;
+            }
+            else
+            {
+                // Insert new record into both database and memory
+                const queryInsert = `
+                INSERT INTO fileRecords (filePath, fileName, fileType, charCount, wordCount, fileSize, fileExists, lastModified, createdAt, lastChecked)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+                `;
+                this.db.prepare(queryInsert).run(
+                    record.filePath, record.fileName, record.fileType, record.charCount, record.wordCount, record.fileSize, record.fileExists ? 1 : 0,
+                    record.lastModified, record.createdAt, new Date().getTime()
+                );
+                record.id = this.db.lastInsertRowid;
+            }
         }
 
         // 更新内存记录
@@ -132,9 +155,11 @@ export class EventDataStore {
 
     private deleteFileRecord(record: FileRecord): void {
         const index = this.fileRecords.findIndex(r => r.filePath === record.filePath);
-        console.log(record.filePath);
+        console.log(record.filePath + ' deleted');
+
         if (index >= 0)
         {
+            console.log('deleteFileRecord: deleted ' + record.filePath);
             record.id = this.fileRecords[index].id;
 
             // 标记数据库文件记录为删除状态
@@ -152,25 +177,22 @@ export class EventDataStore {
             // 删除内存记录
             this.fileRecords.splice(index, 1);
         }
+        else
+        {
+            console.error("deleteFileRecord: no " + record.filePath);
+        }
     }
 
     private moveFileRecord(record: FileRecord): void {
+        // 检查内存中旧文件记录是否存在
         const oldRecord = this.fileRecords.find(r => r.id === record.id);
 
-        if (oldRecord) {
-            console.log('File moved from ' + oldRecord.filePath + ' to ' + record.filePath);
+        // 检查数据库中移动后的文件记录是否已存在
+        const dstQuery = `SELECT * FROM fileRecords WHERE filePath = ?;`;
+        const dstRecord = this.db.prepare(dstQuery).get(record.filePath);
 
-            const queryUpdate = `
-                UPDATE fileRecords SET
-                filePath = ?, fileName = ?, fileType = ?, charCount = ?, wordCount = ?, fileSize = ?, fileExists = ?,
-                lastModified = ?, createdAt = ?, lastChecked = ?
-                WHERE id = ?;
-            `;
-            this.db.prepare(queryUpdate).run(
-                record.filePath, record.fileName, record.fileType, record.charCount, record.wordCount, record.fileSize, 1,
-                record.lastModified, record.createdAt, new Date().getTime(),
-                record.id
-            );
+        if (oldRecord) {
+            console.log('moveFileRecord from ' + oldRecord.filePath + ' to ' + record.filePath);
 
             oldRecord.filePath = record.filePath;
             oldRecord.fileName = record.fileName;
@@ -180,7 +202,58 @@ export class EventDataStore {
             oldRecord.lastModified = record.lastModified;
             oldRecord.createdAt = record.createdAt;
             oldRecord.lastChecked = record.lastChecked;
-        } 
+
+            if (dstRecord)
+            {
+                // 更新移动后的文件记录
+                const dstUpdate = `
+                    UPDATE fileRecords SET
+                    filePath = ?, fileName = ?, fileType = ?, charCount = ?, wordCount = ?, fileSize = ?, fileExists = ?,
+                    lastModified = ?, createdAt = ?, lastChecked = ?
+                    WHERE id = ?;
+                `;
+                this.db.prepare(dstUpdate).run(
+                    record.filePath, record.fileName, record.fileType, record.charCount, record.wordCount, record.fileSize, 1,
+                    record.lastModified, record.createdAt, new Date().getTime(),
+                    dstRecord.id
+                );
+                
+                // 更新移动前的文件记录
+                const srcUpdate = `
+                    UPDATE fileRecords SET
+                    charCount = ?, wordCount = ?, fileSize = ?, fileExists = ?,
+                    lastModified = ?, createdAt = ?, lastChecked = ?
+                    WHERE id = ?;
+                `;
+                const currTime = new Date().getTime();
+                this.db.prepare(srcUpdate).run(
+                    0, 0, 0, 0,
+                    currTime, currTime, currTime,
+                    record.id
+                );
+                oldRecord.id = dstRecord.id;
+            }
+            else
+            {
+                const queryUpdate = `
+                    UPDATE fileRecords SET
+                    filePath = ?, fileName = ?, fileType = ?, charCount = ?, wordCount = ?, fileSize = ?, fileExists = ?,
+                    lastModified = ?, createdAt = ?, lastChecked = ?
+                    WHERE id = ?;
+                `;
+                this.db.prepare(queryUpdate).run(
+                    record.filePath, record.fileName, record.fileType, record.charCount, record.wordCount, record.fileSize, 1,
+                    record.lastModified, record.createdAt, new Date().getTime(),
+                    record.id
+                );
+            }
+
+            console.log('moveFileRecord done');
+        }
+        else
+        {
+            console.error("moveFileRecord: no " + record.filePath);
+        }
     }
 
     public addEventRecord_FileOps(fileRecord: FileRecord, eventType: EventType): void {
