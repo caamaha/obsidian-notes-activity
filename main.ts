@@ -21,17 +21,15 @@ export default class NoteActivityPlugin extends Plugin {
         this.fileMonitor = new FileMonitor(this.app.vault, this.eventDataStore, this.eventManager);
 
         this.app.workspace.onLayoutReady(async () => {
-            await this.fileMonitor.init();
+            this.fileMonitor.init();
             this.registerEditorExtension(this.eventTracker.getUpdateListener());
         });
     }
 
     onunload() {
         console.log('Unloading Note Activity Plugin...');
-
-        if (this.eventDataStore) {
-            this.eventDataStore.close();
-        }
+        this.fileMonitor.tearDown();
+        this.eventDataStore.close();
     }
 
     private initDatabase() {

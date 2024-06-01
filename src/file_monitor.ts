@@ -16,9 +16,19 @@ export class FileMonitor {
         this.eventManager = eventManager;
     }
 
-    async init() {
+    public init() {
         console.log("Initializing File Monitor...");
+        this.syncFiles();
+    }
 
+    public tearDown()
+    {
+        console.log("Tearing down File Monitor...");
+        this.syncFiles();
+    }
+
+    private syncFiles()
+    {
         // 从数据库获取所有记录
         const storedRecords = this.dataStore.fileRecords;
         const storedRecordMap = new Map(storedRecords.map(record => [record.filePath, record]));

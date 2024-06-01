@@ -163,7 +163,10 @@ export class EventDataStore {
         const query = `SELECT * FROM fileRecords WHERE filePath = ?;`;
         const record = this.db.prepare(query).get(fileRecord.filePath);
 
-        console.log(record);
+        if (eventType === 'u')
+        {
+            record.filePath = '';                               // 为节省数据空间，更新事件不需要记录文件路径
+        }
 
         if (record) {
             const insertSql = `
@@ -173,36 +176,8 @@ export class EventDataStore {
             const stmt = this.db.prepare(insertSql);
             stmt.run(record.id, eventType, record.filePath, record.charCount, record.wordCount, record.lastModified);
         }
+        
     }
-
-    // public addEventRecord(event: EventRecord): void {
-    //     const existingRecord = this.fileRecords.find(r => r.id === event.fileId);
-
-    //     if (!existingRecord && event.eventType === 'c') {
-    //         const file = this.vault.getAbstractFileByPath(event.dstPath);
-    //         if (file && file instanceof TFile) {
-    //             this.updateFileRecord(new FileRecord({
-    //                 filePath: event.fileId,
-    //                 fileName: file.name,
-    //                 fileType: file.extension,
-    //                 wordCount: event.wordCount,
-    //                 charCount: event.charCount,
-    //                 fileSize: file.stat.size,
-    //                 fileExists: true,
-    //                 lastModified: file.stat.mtime,
-    //                 createdAt: file.stat.ctime,
-    //                 lastChecked: new Date().getTime()
-    //             }));
-    //         }
-    //     }
-
-    //     const insertSql = `
-    //         INSERT INTO note_events (fileId, eventType, dstPath, charCount, wordCount, timestamp)
-    //         VALUES (?, ?, ?, ?, ?, ?);
-    //     `;
-    //     const stmt = this.db.prepare(insertSql);
-    //     stmt.run(event.fileId, event.eventType, event.dstPath, event.charCount, event.wordCount, event.timestamp);
-    // }
 
     public getFilePathById(fileId: number): string | null {
         const record = this.fileRecords.find(record => record.id === fileId);

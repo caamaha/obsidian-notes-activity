@@ -8,7 +8,7 @@ export class EventManager {
     private vault: Vault;
     private dataStore: EventDataStore;
     private modifyTimers: Map<number, NodeJS.Timeout>;
-    private modifyTimeout = 10000;                              // 修改事件的超时触发时间
+    private modifyTimeout = 5000;                              // 修改事件的超时触发时间
 
     constructor(vault: Vault, dataStore: EventDataStore) {
         this.vault = vault;
@@ -36,8 +36,8 @@ export class EventManager {
                     filePath: file.path,
                     fileName: file.name,
                     fileType: file.extension,
-                    wordCount: wordCount,
                     charCount: charCount,
+                    wordCount: wordCount,
                     fileSize: file.stat.size,
                     fileExists: true,
                     lastModified: file.stat.mtime,
@@ -56,10 +56,22 @@ export class EventManager {
 
     public handleUpdateEventByFilePath(filePath: string, timestamp: Date): void {
         const fileId = this.dataStore.getFileIdByPath(filePath);
+
+        // console.log(`UpdateEvent:`, filePath, timestamp);
         
         if (fileId != null)
         {
-            this.handleUpdateEvent(fileId, timestamp);
+            // 如果已存在计时器，先清除
+            if (this.modifyTimers.has(fileId)) {
+                clearTimeout(this.modifyTimers.get(fileId));
+            }
+
+            // 设置新的计时器
+            const timer = setTimeout(() => {
+                this.handleUpdateTimeout(fileId, timestamp);
+            }, this.modifyTimeout);
+
+            this.modifyTimers.set(fileId, timer);
         }
         else
         {
@@ -67,25 +79,9 @@ export class EventManager {
         }
     }
 
-    public handleUpdateEvent(fileId: number, timestamp: Date): void {
-        console.log(`UpdateEvent:`, this.dataStore.getFilePathById(fileId), timestamp);
-
-        // 如果已存在计时器，先清除
-        if (this.modifyTimers.has(fileId)) {
-            clearTimeout(this.modifyTimers.get(fileId));
-        }
-
-        // 设置新的计时器
-        const timer = setTimeout(() => {
-            this.handleUpdateTimeout(fileId, timestamp);
-        }, this.modifyTimeout);
-
-        this.modifyTimers.set(fileId, timer);
-    }
-
     private handleUpdateTimeout(fileId: number, timestamp: Date): void {
         const filePath = this.dataStore.getFilePathById(fileId);
-        console.log(`Handling modification timeout for ${filePath}`);
+        console.log(`Handling modification timeout for ${filePath}`, timestamp);
 
         if (filePath == null)
         {
@@ -93,22 +89,30 @@ export class EventManager {
             return;
         }
 
-        // // 处理延时后的笔记修改，如计算字数和词数变化
-        // const file = this.vault.getAbstractFileByPath(filePath);
-        // if (file && file instanceof TFile && file.extension === 'md') {
-        //     this.vault.cachedRead(file).then(content => {
-        //         const { charCount, wordCount } = TextAnalyzer.analyzeText(content);
-        //         const event: EventRecord = {
-        //             fileId: fileId,
-        //             dstPath: '',
-        //             eventType: 'u',
-        //             charCount: charCount,
-        //             wordCount: wordCount,
-        //             timestamp: timestamp.getTime()
-        //         };
-        //         this.dataStore.addEventRecord(event);
-        //     });
-        // }
+        // 处理延时后的笔记修改，如计算字数和词数变化
+        const file = this.vault.getAbstractFileByPath(filePath);
+        if (file && file instanceof TFile && file.extension === 'md') {
+            this.vault.cachedRead(file).then(content => {
+                const { charCount, wordCount } = TextAnalyzer.analyzeText(content);
+                const fileRecord = new FileRecord({
+                    id: fileId,
+                    filePath: file.path,
+                    fileName: file.name,
+                    fileType: file.extension,
+                    charCount: charCount,
+                    wordCount: wordCount,
+                    fileSize: file.stat.size,
+                    fileExists: true,
+                    lastModified: file.stat.mtime,
+                    createdAt: file.stat.ctime,
+                    lastChecked: timestamp.getTime()
+                });
+
+                console.log(charCount + ' ' + wordCount);
+
+                this.dataStore.handleFileOps(fileRecord, 'u')
+            });
+        }
 
         // 清除计时器记录
         this.modifyTimers.delete(fileId);
