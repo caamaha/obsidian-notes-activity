@@ -22,7 +22,20 @@ export default class NoteActivityPlugin extends Plugin {
 
         this.app.workspace.onLayoutReady(async () => {
             this.fileMonitor.init();
-            this.registerEditorExtension(this.eventTracker.getUpdateListener());
+            // this.registerEditorExtension(this.eventTracker.getUpdateListener());
+
+            this.registerEvent(this.app.vault.on('create', (file) => {
+                console.log('File create ' + file.path)
+            }));
+            this.registerEvent(this.app.vault.on('delete', (file) => {
+                console.log('File delete ' + file.path)
+            }));
+            this.registerEvent(this.app.vault.on('rename', (file, oldPath) => {
+                this.eventTracker.handleFileRename(file.path, oldPath);
+            }));
+            this.registerEvent(this.app.vault.on('modify', (file) => {
+                this.eventTracker.handleFileModify(file.path);
+            }));
         });
     }
 

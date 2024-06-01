@@ -1,5 +1,5 @@
 // src/event_tracker.ts
-import { Workspace } from 'obsidian';
+import { TFile, Workspace } from 'obsidian';
 import { EditorView, ViewUpdate } from '@codemirror/view';
 import { EventManager } from './event_manager';
 
@@ -12,35 +12,15 @@ export class EventTracker {
         this.eventManager = eventManager;
     }
 
-    // 返回一个编辑器更新监听器
-    getUpdateListener() {
-        return EditorView.updateListener.of((update: ViewUpdate) => {
-            this.handleEditorUpdate(update);
-        });
+    public handleFileModify(path: string): void
+    {
+        console.log(path + ' modified');
+        this.eventManager.handleUpdateEventByFilePath(path);
     }
 
-    private handleEditorUpdate(update: ViewUpdate) {
-        // 获取当前活跃文件的路径
-        let filePath = this.workspace.getActiveFile()?.path ?? "";
-
-        if (filePath != "")
-        {
-            const changes = update.changes;
-            let changed = false;
-
-            changes.iterChanges((fromA, toA, fromB, toB, inserted) => {
-                // fromA 和 toA 是文本删除的范围，inserted 是插入的文本
-                if (fromA != toA || inserted.length > 0)
-                {
-                    changed = true;
-                }
-            });
-            
-            // 构建笔记修改事件
-            if (changed)
-            {
-                this.eventManager.handleUpdateEventByFilePath(filePath, new Date());
-            }
-        }
+    public handleFileRename(newPath: string, oldPath: string): void
+    {
+        console.log(oldPath + ' renamed to ' + newPath);
+        this.eventManager.handleRenameEventByFilePath(newPath, oldPath);
     }
 }

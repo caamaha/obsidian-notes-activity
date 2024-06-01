@@ -21,7 +21,7 @@ export class EventManager {
         console.log(`FileOps:`, filePath, eventType);
         if (eventType === 'c' ||
             eventType === 'u' ||
-            eventType === 'm')
+            eventType === 'r')
         {
             const file = this.vault.getAbstractFileByPath(filePath) as TFile;
             if (!file) {
@@ -54,10 +54,8 @@ export class EventManager {
         }
     }
 
-    public handleUpdateEventByFilePath(filePath: string, timestamp: Date): void {
+    public handleUpdateEventByFilePath(filePath: string): void {
         const fileId = this.dataStore.getFileIdByPath(filePath);
-
-        // console.log(`UpdateEvent:`, filePath, timestamp);
         
         if (fileId != null)
         {
@@ -68,7 +66,7 @@ export class EventManager {
 
             // 设置新的计时器
             const timer = setTimeout(() => {
-                this.handleUpdateTimeout(fileId, timestamp);
+                this.handleUpdateTimeout(fileId, new Date());
             }, this.modifyTimeout);
 
             this.modifyTimers.set(fileId, timer);
@@ -116,6 +114,39 @@ export class EventManager {
 
         // 清除计时器记录
         this.modifyTimers.delete(fileId);
+    }
+
+    public handleRenameEventByFilePath(newPath: string, oldPath: string): void {
+        console.log("Rename event:", newPath, oldPath);
+        const fileId = this.dataStore.getFileIdByPath(oldPath);
+        if (fileId != null)
+        {
+            const file = this.vault.getAbstractFileByPath(newPath);
+            const oldRecord = this.dataStore.getFileRecordById(fileId);
+
+            if (file && file instanceof TFile && oldRecord != null)
+            {
+                const newRecord = new FileRecord({
+                    id: fileId,
+                    filePath: file.path,
+                    fileName: file.name,
+                    fileType: file.extension,
+                    charCount: oldRecord.charCount,
+                    wordCount: oldRecord.wordCount,
+                    fileSize: file.stat.size,
+                    fileExists: true,
+                    lastModified: file.stat.mtime,
+                    createdAt: file.stat.ctime,
+                    lastChecked: new Date().getTime()
+                });
+
+                this.dataStore.handleFileOps(newRecord, 'r')
+            }
+        }
+        else
+        {
+            console.error(`File id not found for file path ${oldPath}`);
+        }
     }
 
     // 资源清理，如应用关闭时调用

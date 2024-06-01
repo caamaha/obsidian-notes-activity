@@ -27,13 +27,13 @@ export class FileRecord {
     }
 }
 
-export type EventType = 'c' | 'd' | 'm' | 'u';                  // 创建、删除、移动、更新
+export type EventType = 'c' | 'd' | 'r' | 'u';                  // 创建、删除、重命名、更新
 
 export interface EventRecord
 {
     fileId: number;                                             // 与 FileRecord 的 id 相关联
     eventType: EventType;                                       // 事件类型
-    filePath: string;                                           // 文件路径（仅针对创建、删除和移动事件）
+    filePath: string;                                           // 文件路径（仅针对创建、删除和重命名事件）
     charCount: number;                                          // 笔记的字符数
     wordCount: number;                                          // 笔记的词数
     timestamp: number;                                          // 事件发生的时间戳，Unix timestamp in milliseconds

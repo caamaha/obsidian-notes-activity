@@ -80,8 +80,9 @@ export class EventDataStore {
                 this.deleteFileRecord(fileRecord);
                 this.addEventRecord_FileOps(fileRecord, eventType);
                 break;
-            case 'm': // 移动
-                // this.moveFileRecord(event);
+            case 'r': // 重命名
+                this.moveFileRecord(fileRecord);
+                this.addEventRecord_FileOps(fileRecord, eventType);
                 break;
             default:
                 throw new Error("Unsupported file operation");
@@ -153,10 +154,33 @@ export class EventDataStore {
         }
     }
 
-    private moveFileRecord(event: EventRecord): void {
-        throw new Error("Method not implemented.");
-    //     const updateSql = `UPDATE file_records SET filePath = ?, lastChecked = ? WHERE id = ?`;
-    //     this.db.prepare(updateSql).run(event.dstPath, new Date().getTime(), event.fileId);
+    private moveFileRecord(record: FileRecord): void {
+        const oldRecord = this.fileRecords.find(r => r.id === record.id);
+
+        if (oldRecord) {
+            console.log('File moved from ' + oldRecord.filePath + ' to ' + record.filePath);
+
+            const queryUpdate = `
+                UPDATE fileRecords SET
+                filePath = ?, fileName = ?, fileType = ?, charCount = ?, wordCount = ?, fileSize = ?, fileExists = ?,
+                lastModified = ?, createdAt = ?, lastChecked = ?
+                WHERE id = ?;
+            `;
+            this.db.prepare(queryUpdate).run(
+                record.filePath, record.fileName, record.fileType, record.charCount, record.wordCount, record.fileSize, 1,
+                record.lastModified, record.createdAt, new Date().getTime(),
+                record.id
+            );
+
+            oldRecord.filePath = record.filePath;
+            oldRecord.fileName = record.fileName;
+            oldRecord.fileType = record.fileType;
+            oldRecord.fileSize = record.fileSize;
+            oldRecord.fileExists = record.fileExists;
+            oldRecord.lastModified = record.lastModified;
+            oldRecord.createdAt = record.createdAt;
+            oldRecord.lastChecked = record.lastChecked;
+        } 
     }
 
     public addEventRecord_FileOps(fileRecord: FileRecord, eventType: EventType): void {
@@ -176,7 +200,7 @@ export class EventDataStore {
             const stmt = this.db.prepare(insertSql);
             stmt.run(record.id, eventType, record.filePath, record.charCount, record.wordCount, record.lastModified);
         }
-        
+
     }
 
     public getFilePathById(fileId: number): string | null {
@@ -196,7 +220,11 @@ export class EventDataStore {
         }
         else
         {
-            throw new Error("File not found" + filePath);
+            throw new Error("getFileIdByPath: File not found " + filePath);
         }
+    }
+
+    public getFileRecordById(fileId: number): FileRecord | null {
+        return this.fileRecords.find(record => record.id === fileId) ?? null;
     }
 }
