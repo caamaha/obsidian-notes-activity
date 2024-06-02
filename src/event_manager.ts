@@ -18,7 +18,7 @@ export class EventManager {
 
     public handleFileOps(filePath: string, eventType: EventType): void
     {
-        console.log(`FileOps:`, filePath, eventType);
+        // console.log(`FileOps:`, filePath, eventType);
         if (eventType === 'c' ||
             eventType === 'u' ||
             eventType === 'r')
@@ -28,8 +28,6 @@ export class EventManager {
                 console.error(`File not found: ${filePath}`);
                 return;
             }
-
-            console.log(filePath + ' ' + eventType);
     
             this.vault.cachedRead(file).then(content => {
                 const { charCount, wordCount } = TextAnalyzer.analyzeText(content);
@@ -81,7 +79,7 @@ export class EventManager {
 
     private handleUpdateTimeout(fileId: number, timestamp: Date): void {
         const filePath = this.dataStore.getFilePathById(fileId);
-        console.log(`Handling modification timeout for ${filePath}`, timestamp);
+        // console.log(`Handling modification timeout for ${filePath}`, timestamp);
 
         if (filePath == null)
         {
@@ -107,8 +105,6 @@ export class EventManager {
                     createdAt: file.stat.ctime,
                     lastChecked: timestamp.getTime()
                 });
-
-                console.log(charCount + ' ' + wordCount);
 
                 this.dataStore.handleFileOps(fileRecord, 'u')
             });

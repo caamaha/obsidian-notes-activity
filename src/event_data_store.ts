@@ -1,25 +1,22 @@
 // event_data_store.ts
-import { Vault, TFile } from 'obsidian';
 import { FileRecord, EventRecord, EventType } from './record_datatype';
-import { TextAnalyzer } from './text_analyzer';
 import Database from '@aidenlx/better-sqlite3';
 
 const binaryPath = "C:\\Users\\Administrator\\AppData\\Roaming\\obsidian\\better-sqlite3-8.0.1-mod.1.node";
 
 export class EventDataStore {
-    private vault: Vault;
     private db: any;
+    private activitiesFetcher: ActivitiesFetcher;
     public fileRecords: FileRecord[] = [];
 
-    constructor(vault: Vault, dbPath: string) {
-        this.vault = vault;
-
+    constructor(dbPath: string) {
         console.log('Database initialized at:', dbPath);
         
         // 打开或创建数据库
         this.db = new Database(dbPath, { nativeBinding: binaryPath, fileMustExist: false });
         this.createTables();
         this.loadFileRecords();
+        this.activitiesFetcher = new ActivitiesFetcher(this.db);
     }
 
     close() {
@@ -60,6 +57,7 @@ export class EventDataStore {
             );
         `;
         this.db.prepare(createNoteEventsTable).run();
+        this.db.exec('CREATE INDEX IF NOT EXISTS idx_timestamp ON eventRecords(timestamp);');
     }
 
     // 从数据库加载文件记录
@@ -70,6 +68,7 @@ export class EventDataStore {
     }
 
     public handleFileOps(fileRecord: FileRecord, eventType: EventType): void {
+        console.log('handleFileOps: ' + fileRecord.filePath + ' ' + eventType + ' ' + fileRecord.charCount + ' ' + fileRecord.wordCount);
         switch (eventType) {
             case 'c': // 创建
             case 'u': // 更新
@@ -155,11 +154,11 @@ export class EventDataStore {
 
     private deleteFileRecord(record: FileRecord): void {
         const index = this.fileRecords.findIndex(r => r.filePath === record.filePath);
-        console.log(record.filePath + ' deleted');
+        // console.log(record.filePath + ' deleted');
 
         if (index >= 0)
         {
-            console.log('deleteFileRecord: deleted ' + record.filePath);
+            // console.log('deleteFileRecord: deleted ' + record.filePath);
             record.id = this.fileRecords[index].id;
 
             // 标记数据库文件记录为删除状态
@@ -192,7 +191,7 @@ export class EventDataStore {
         const dstRecord = this.db.prepare(dstQuery).get(record.filePath);
 
         if (oldRecord) {
-            console.log('moveFileRecord from ' + oldRecord.filePath + ' to ' + record.filePath);
+            // console.log('moveFileRecord from ' + oldRecord.filePath + ' to ' + record.filePath);
 
             oldRecord.filePath = record.filePath;
             oldRecord.fileName = record.fileName;
@@ -248,7 +247,7 @@ export class EventDataStore {
                 );
             }
 
-            console.log('moveFileRecord done');
+            // console.log('moveFileRecord done');
         }
         else
         {
@@ -273,7 +272,6 @@ export class EventDataStore {
             const stmt = this.db.prepare(insertSql);
             stmt.run(record.id, eventType, record.filePath, record.charCount, record.wordCount, record.lastModified);
         }
-
     }
 
     public getFilePathById(fileId: number): string | null {
@@ -299,5 +297,61 @@ export class EventDataStore {
 
     public getFileRecordById(fileId: number): FileRecord | null {
         return this.fileRecords.find(record => record.id === fileId) ?? null;
+    }
+
+    public getActivities(): [EventRecord[][], number, number] {
+        const [start, end] = this.activitiesFetcher.getTimeRange();
+        return [this.activitiesFetcher.getAllEventRecords(), start, end];
+    }
+}
+
+class ActivitiesFetcher
+{
+    private db: any;
+
+    constructor(db: any) {
+        this.db = db;
+    }
+
+    public getAllFileRecords(): FileRecord[]
+    {
+        const query = 'SELECT * FROM fileRecords;';
+        return this.db.prepare(query).all();
+    }
+
+    public getAllEventRecords(): EventRecord[][]
+    {
+        // 获取所有事件记录，按 fileId 分组，每组按 timestamp 升序
+        const rows = this.db.prepare('SELECT * FROM eventRecords ORDER BY fileId, timestamp ASC;').all() as EventRecord[];
+
+        // 二维数组存储：外层数组是按 fileId 分组的记录
+        const groupedEvents: EventRecord[][] = [];
+        let currentFileId = 0;
+        let currentGroup: EventRecord[] = [];
+
+        // 遍历结果并分组
+        rows.forEach(row => {
+            if (row.fileId !== currentFileId) {
+                if (currentGroup.length > 0) {
+                    groupedEvents.push(currentGroup);           // 添加之前的分组到总数组
+                }
+                currentFileId = row.fileId;
+                currentGroup = [];                              // 开始新的分组
+            }
+            currentGroup.push(row);                             // 添加记录到当前分组
+        });
+
+        // 确保最后一组被添加
+        if (currentGroup.length > 0) {
+            groupedEvents.push(currentGroup);
+        }
+
+        return groupedEvents;
+    }
+
+    public getTimeRange(): [number, number] {
+        const query = 'SELECT MIN(timestamp) AS minTime, MAX(timestamp) AS maxTime FROM eventRecords;';
+        const result = this.db.prepare(query).get();
+        return [result.minTime, result.maxTime];
     }
 }

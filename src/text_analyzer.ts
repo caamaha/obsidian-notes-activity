@@ -18,4 +18,3 @@ export class TextAnalyzer {
         return { charCount, wordCount };
     }
 }
-

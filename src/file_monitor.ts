@@ -21,12 +21,6 @@ export class FileMonitor {
         this.syncFiles();
     }
 
-    public tearDown()
-    {
-        console.log("Tearing down File Monitor...");
-        this.syncFiles();
-    }
-
     private syncFiles()
     {
         // 从数据库获取所有记录
