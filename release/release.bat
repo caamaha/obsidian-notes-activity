@@ -7,4 +7,3 @@ copy manifest.json .\release
 copy styles.css .\release
 
 echo Files copied successfully to release directory.
-pause

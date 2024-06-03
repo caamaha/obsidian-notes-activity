@@ -1,5 +1,6 @@
 // event_data_store.ts
 import { FileRecord, EventRecord, EventType } from './record_datatype';
+import logger from './log';
 import Database from '@aidenlx/better-sqlite3';
 
 const binaryPath = "C:\\Users\\Administrator\\AppData\\Roaming\\obsidian\\better-sqlite3-8.0.1-mod.1.node";
@@ -68,7 +69,10 @@ export class EventDataStore {
     }
 
     public handleFileOps(fileRecord: FileRecord, eventType: EventType): void {
-        console.log('handleFileOps: ' + fileRecord.filePath + ' ' + eventType + ' ' + fileRecord.charCount + ' ' + fileRecord.wordCount);
+        // console.log('handleFileOps: ' + fileRecord.filePath + ' ' + eventType + ' ' + fileRecord.charCount + ' ' + fileRecord.wordCount);
+        const existRecord = this.fileRecords.find(r => r.id === fileRecord.id);
+        logger.noticeFileOps(fileRecord, existRecord, eventType);
+
         switch (eventType) {
             case 'c': // 创建
             case 'u': // 更新
@@ -80,7 +84,7 @@ export class EventDataStore {
                 this.addEventRecord_FileOps(fileRecord, eventType);
                 break;
             case 'r': // 重命名
-                this.moveFileRecord(fileRecord);
+                this.moveFileRecord(fileRecord, existRecord);
                 this.addEventRecord_FileOps(fileRecord, eventType);
                 break;
             default:
@@ -182,25 +186,26 @@ export class EventDataStore {
         }
     }
 
-    private moveFileRecord(record: FileRecord): void {
-        // 检查内存中旧文件记录是否存在
-        const oldRecord = this.fileRecords.find(r => r.id === record.id);
+    private moveFileRecord(record: FileRecord, existRecord: FileRecord | undefined): void {
+        
+
 
         // 检查数据库中移动后的文件记录是否已存在
         const dstQuery = `SELECT * FROM fileRecords WHERE filePath = ?;`;
         const dstRecord = this.db.prepare(dstQuery).get(record.filePath);
 
-        if (oldRecord) {
-            // console.log('moveFileRecord from ' + oldRecord.filePath + ' to ' + record.filePath);
+        // 检查内存中旧文件记录是否存在
+        if (existRecord) {
+            // console.log('moveFileRecord from ' + existRecord.filePath + ' to ' + record.filePath);
 
-            oldRecord.filePath = record.filePath;
-            oldRecord.fileName = record.fileName;
-            oldRecord.fileType = record.fileType;
-            oldRecord.fileSize = record.fileSize;
-            oldRecord.fileExists = record.fileExists;
-            oldRecord.lastModified = record.lastModified;
-            oldRecord.createdAt = record.createdAt;
-            oldRecord.lastChecked = record.lastChecked;
+            existRecord.filePath = record.filePath;
+            existRecord.fileName = record.fileName;
+            existRecord.fileType = record.fileType;
+            existRecord.fileSize = record.fileSize;
+            existRecord.fileExists = record.fileExists;
+            existRecord.lastModified = record.lastModified;
+            existRecord.createdAt = record.createdAt;
+            existRecord.lastChecked = record.lastChecked;
 
             if (dstRecord)
             {
@@ -230,7 +235,7 @@ export class EventDataStore {
                     currTime, currTime, currTime,
                     record.id
                 );
-                oldRecord.id = dstRecord.id;
+                existRecord.id = dstRecord.id;
             }
             else
             {
