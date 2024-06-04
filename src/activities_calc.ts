@@ -28,10 +28,11 @@ export class ActivitiesCalc {
     }
 
     public calculateWordStatsPerPeriod(interval: number): [TimeSegment[], number, number] {
-        const [eventRecords, minTime, maxTime] = this.dataStore.getActivities();
+        let [eventRecords, minTime, maxTime] = this.dataStore.getActivities();
 
         // 将时间范围划分为指定的时间段
         interval = Math.max(interval, 10000);                   // 设置最小间隔
+
         const segments: TimeSegment[] = [];
         for (let time = minTime; time < maxTime; time += interval) {
             segments.push(new TimeSegment(time, time + interval));
@@ -47,6 +48,7 @@ export class ActivitiesCalc {
             fileEvents.forEach(event => {
                 const segmentIndex = Math.floor((event.timestamp - minTime) / interval);
                 // 初始化或延续之前的统计数据到当前 segment
+                // TODO: 不延续统计就是统计增量，延续统计就是统计累计
                 for (let i = lastSegmentIndex; i < segmentIndex; i++) {
                     segments[i].addCounts(
                         lastEventStats[event.fileId]?.charCount || 0,

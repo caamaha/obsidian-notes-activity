@@ -8,19 +8,22 @@ class ActivitiesOptions {
     chartTypes: Array<'chars' | 'words'> = ['chars', 'words'];
     isCumulative: boolean = true;
     isRelativeToRecent: boolean = false;
+    pointRadius: number = 0;
 
     constructor(
         periodsStr: [string, string][],
         recentDuration: string = '0min',
         chartTypes: Array<'chars' | 'words'> = ['chars', 'words'],
         isCumulative: boolean = true,
-        isRelativeToRecent: boolean = false
+        isRelativeToRecent: boolean = false,
+        pointRadius: number = 0
     ) {
         this.periodsStr = periodsStr;
         this.recentDuration = recentDuration;
         this.chartTypes = chartTypes;
         this.isCumulative = isCumulative;
         this.isRelativeToRecent = isRelativeToRecent;
+        this.pointRadius = pointRadius;
     }
 }
 
@@ -37,7 +40,7 @@ export class Api {
         const interval = this.activitiesCalc.parseIntervalToMilliseconds(intervalStr);
         const [segments, minTime, maxTime] = this.activitiesCalc.calculateWordStatsPerPeriod(interval);
 
-        const labels = segments.map((_, index) => new Date(minTime + index * interval).toLocaleString());
+        const labels = segments.map((segment, _) => new Date(segment.endTime).toLocaleString());
         const charCounts = segments.map(segment => segment.totalChars);
         const wordCounts = segments.map(segment => segment.totalWords);
 
@@ -46,63 +49,6 @@ export class Api {
             data: {
                 labels: labels,
                 datasets: [{
-                    label: 'Total Characters',
-                    data: charCounts,
-                    backgroundColor: ['rgba(255, 99, 132, 0.2)'],
-                    borderColor: ['rgba(255, 99, 132, 1)'],
-                    borderWidth: 1
-                },
-                {
-                    label: 'Total Words',
-                    data: wordCounts,
-                    backgroundColor: ['rgba(54, 162, 235, 0.2)'],
-                    borderColor: ['rgba(54, 162, 235, 1)'],
-                    borderWidth: 1
-                }],
-            },
-            options: {
-                elements: {
-                    point:{
-                        radius: 0
-                    }
-                }
-            },
-            scales: {
-                x: {
-                    type: 'time'
-                },
-                title: {
-                    display: true,
-                    text: 'Date'
-                }
-            }
-        };
-
-        return chartData;
-    }
-
-    public getActivitiesVariablePeriod(periodsStr: [string, string][], recentDuration: string = '0min'): any {
-        // 解析每个间隔并调用变周期版本的统计方法
-        let segments = this.activitiesCalc.calculateVariablePeriodStats(periodsStr);
-        const durationMillis  = this.activitiesCalc.parseIntervalToMilliseconds(recentDuration);
-        const cutoffTime = (new Date().getTime()) - durationMillis; // 计算截止时间
-
-        if (durationMillis != 0)
-        {
-            segments = segments.filter(segment => segment.startTime >= cutoffTime);
-            console.log(segments);
-        }
-
-        const labels = segments.map(segment => new Date(segment.startTime).toLocaleString());
-        const charCounts = segments.map(segment => segment.totalChars);
-        const wordCounts = segments.map(segment => segment.totalWords);
-
-        const chartData = {
-            type: 'line',
-            data: {
-                labels: labels,
-                datasets: [
-                    {
                     label: 'Total Characters',
                     data: charCounts,
                     backgroundColor: ['rgba(255, 99, 132, 0.2)'],
@@ -159,9 +105,7 @@ export class Api {
             }
         }
 
-        // TODO: 处理增量式统计
-
-        const labels = segments.map(segment => new Date(segment.startTime).toLocaleString());
+        const labels = segments.map(segment => new Date(segment.endTime));
         const datasets = [];
 
         // 动态添加数据集
@@ -194,15 +138,18 @@ export class Api {
             options: {
                 elements: {
                     point:{
-                        radius: 0
+                        radius: options.pointRadius
                     }
-                }
-            },
-            scales: {
-                x: {
-                    type: 'time',
-                    time: {
-                        tooltipFormat: 'll'
+                },
+                animation: {
+                    duration: 0
+                },
+                scales: {
+                    x: {
+                        type: 'time',
+                        ticks: {
+                            maxTicksLimit: 15
+                        }
                     }
                 }
             }

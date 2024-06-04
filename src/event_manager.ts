@@ -24,8 +24,13 @@ export class EventManager {
             eventType === 'r')
         {
             const file = this.vault.getAbstractFileByPath(filePath) as TFile;
+
             if (!file) {
                 console.error(`File not found: ${filePath}`);
+                return;
+            }
+
+            if (file.extension !== 'md') {
                 return;
             }
     

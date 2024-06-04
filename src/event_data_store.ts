@@ -182,7 +182,7 @@ export class EventDataStore {
         }
         else
         {
-            console.error("deleteFileRecord: no " + record.filePath);
+            // console.error("deleteFileRecord: no " + record.filePath);
         }
     }
 
@@ -274,9 +274,14 @@ export class EventDataStore {
                 INSERT INTO eventRecords (fileId, eventType, filePath, charCount, wordCount, timestamp)
                 VALUES (?, ?, ?, ?, ?, ?);
             `;
-            const stmt = this.db.prepare(insertSql);
-            stmt.run(record.id, eventType, record.filePath, record.charCount, record.wordCount, record.lastModified);
+            this.db.prepare(insertSql).run(record.id, eventType, record.filePath, record.charCount, record.wordCount, record.lastModified);
         }
+    }
+
+    // 精简数据库中的事件记录
+    // 1. 如果事件类型为 'c'（创建或恢复），删除该文件所有后续的删除事件
+    private simpilifyEventRecords() {
+        // TODO: 
     }
 
     public getFilePathById(fileId: number): string | null {
