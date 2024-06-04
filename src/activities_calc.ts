@@ -28,7 +28,7 @@ export class ActivitiesCalc {
     }
 
     public calculateWordStatsPerPeriod(interval: number): [TimeSegment[], number, number] {
-        let [eventRecords, minTime, maxTime] = this.dataStore.getActivities();
+        let [eventRecords, minTime, maxTime] = this.dataStore.getActivities(0);
 
         // 将时间范围划分为指定的时间段
         interval = Math.max(interval, 10000);                   // 设置最小间隔
@@ -78,9 +78,11 @@ export class ActivitiesCalc {
         return [segments, minTime, maxTime];
     }
 
-    public calculateVariablePeriodStats(periodsStr: [string, string][]) {
-        let [eventRecords, minTime, maxTime] = this.dataStore.getActivities();
-        const segments: TimeSegment[] = [];
+    public calculateVariablePeriodStats(periodsStr: [string, string][], cutoffTime: number = 0) {
+        let [eventRecords, minTime, maxTime] = this.dataStore.getActivities(cutoffTime);
+        let segments: TimeSegment[] = [];
+
+        // console.log(new Date(minTime), new Date(maxTime));
     
         // 解析时间段字符串
         const periods: [number, number][] = [];
@@ -95,15 +97,13 @@ export class ActivitiesCalc {
             const start = (i == 0 ? minTime - interval : maxTime - periods[i - 1][1]);
             const end = maxTime - periods[i][1];
 
-            // console.log("Period ", i, start, end, interval);
-
             for (let time = end; time >= start + interval; time -= interval) {
                 segments.push(new TimeSegment(time - interval, time));
-                // console.log(time - interval, time);
             }
         }
 
         segments.reverse();
+        segments = segments.filter(segment => segment.startTime >= cutoffTime);
     
         // 创建和遍历映射
         const lastEventStats: { [fileId: number]: { charCount: number; wordCount: number } } = {};

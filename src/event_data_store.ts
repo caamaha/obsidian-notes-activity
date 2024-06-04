@@ -95,6 +95,7 @@ export class EventDataStore {
     private updateFileRecord(record: FileRecord): void {
         // 创建或更新数据库记录
         const existingRecord = this.fileRecords.find(r => r.filePath === record.filePath);
+
         if (existingRecord) {
             record.id = existingRecord.id;
             // Update existing record in both database and memory
@@ -139,11 +140,11 @@ export class EventDataStore {
                 INSERT INTO fileRecords (filePath, fileName, fileType, charCount, wordCount, fileSize, fileExists, lastModified, createdAt, lastChecked)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
                 `;
-                this.db.prepare(queryInsert).run(
+                const result = this.db.prepare(queryInsert).run(
                     record.filePath, record.fileName, record.fileType, record.charCount, record.wordCount, record.fileSize, record.fileExists ? 1 : 0,
                     record.lastModified, record.createdAt, new Date().getTime()
                 );
-                record.id = this.db.lastInsertRowid;
+                record.id = result.lastInsertRowid;
             }
         }
 
@@ -309,9 +310,11 @@ export class EventDataStore {
         return this.fileRecords.find(record => record.id === fileId) ?? null;
     }
 
-    public getActivities(): [EventRecord[][], number, number] {
-        const [start, end] = this.activitiesFetcher.getTimeRange();
-        return [this.activitiesFetcher.getAllEventRecords(), start, end];
+    public getActivities(cutoffTime: number): [EventRecord[][], number, number] {
+        let [start, _] = this.activitiesFetcher.getTimeRange();
+        start = (cutoffTime > 0 ? Math.max(cutoffTime, start) : start);
+
+        return [this.activitiesFetcher.getEventRecords(cutoffTime), start, new Date().getTime()];
     }
 }
 
@@ -329,10 +332,21 @@ class ActivitiesFetcher
         return this.db.prepare(query).all();
     }
 
-    public getAllEventRecords(): EventRecord[][]
+    public getEventRecords(cutoffTime: number): EventRecord[][]
     {
         // 获取所有事件记录，按 fileId 分组，每组按 timestamp 升序
-        const rows = this.db.prepare('SELECT * FROM eventRecords ORDER BY fileId, timestamp ASC;').all() as EventRecord[];
+        let query = '';
+
+        if (cutoffTime > 0)
+        {
+            query = `SELECT * FROM eventRecords WHERE timestamp >= ${cutoffTime} ORDER BY fileId, timestamp ASC;`;
+        }
+        else
+        {
+            query = 'SELECT * FROM eventRecords ORDER BY fileId, timestamp ASC;';
+        }
+
+        const rows = this.db.prepare(query).all() as EventRecord[];
 
         // 二维数组存储：外层数组是按 fileId 分组的记录
         const groupedEvents: EventRecord[][] = [];

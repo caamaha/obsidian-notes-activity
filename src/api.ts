@@ -9,6 +9,7 @@ class ActivitiesOptions {
     isCumulative: boolean = true;
     isRelativeToRecent: boolean = false;
     pointRadius: number = 0;
+    scales: any | undefined;
 
     constructor(
         periodsStr: [string, string][],
@@ -16,7 +17,8 @@ class ActivitiesOptions {
         chartTypes: Array<'chars' | 'words'> = ['chars', 'words'],
         isCumulative: boolean = true,
         isRelativeToRecent: boolean = false,
-        pointRadius: number = 0
+        pointRadius: number = 0,
+        scales: any | undefined = undefined
     ) {
         this.periodsStr = periodsStr;
         this.recentDuration = recentDuration;
@@ -24,6 +26,7 @@ class ActivitiesOptions {
         this.isCumulative = isCumulative;
         this.isRelativeToRecent = isRelativeToRecent;
         this.pointRadius = pointRadius;
+        this.scales = scales;
     }
 }
 
@@ -84,16 +87,14 @@ export class Api {
         return chartData;
     }
 
+    // 解析每个间隔并调用变周期版本的统计方法
     public getActivities(options: ActivitiesOptions): any {
-        // 解析每个间隔并调用变周期版本的统计方法
-        let segments = this.activitiesCalc.calculateVariablePeriodStats(options.periodsStr);
         const durationMillis  = this.activitiesCalc.parseIntervalToMilliseconds(options.recentDuration);
-        const cutoffTime = (new Date().getTime()) - durationMillis; // 计算截止时间
 
-        if (durationMillis > 0)
-        {
-            segments = segments.filter(segment => segment.startTime >= cutoffTime);
-        }
+        // 计算截止时间
+        const cutoffTime = durationMillis === 0 ? 0 : (new Date().getTime()) - durationMillis;
+
+        let segments = this.activitiesCalc.calculateVariablePeriodStats(options.periodsStr, cutoffTime);
 
         // 处理相对偏移
         if (options.isRelativeToRecent && durationMillis > 0 && segments.length > 0) {
@@ -128,6 +129,18 @@ export class Api {
             });
         }
 
+        if (options.scales == undefined)
+        {
+            options.scales = {
+                x: {
+                    type: 'time',
+                    ticks: {
+                        maxTicksLimit: 15
+                    }
+                }
+            }
+        }
+
         const chartData = {
             type: 'line',
             data: {
@@ -141,17 +154,8 @@ export class Api {
                         radius: options.pointRadius
                     }
                 },
-                animation: {
-                    duration: 0
-                },
-                scales: {
-                    x: {
-                        type: 'time',
-                        ticks: {
-                            maxTicksLimit: 15
-                        }
-                    }
-                }
+                animation: false,
+                scales: options.scales
             }
         };
 

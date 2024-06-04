@@ -8,7 +8,7 @@ export class EventManager {
     private vault: Vault;
     private dataStore: EventDataStore;
     private modifyTimers: Map<number, NodeJS.Timeout>;
-    private modifyTimeout = 5000;                              // 修改事件的超时触发时间
+    private modifyTimeout = 15000;                             // 修改事件的超时触发时间
 
     constructor(vault: Vault, dataStore: EventDataStore) {
         this.vault = vault;
