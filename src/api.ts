@@ -8,6 +8,7 @@ class ActivitiesOptions {
     chartTypes: Array<'chars' | 'words'> = ['chars', 'words'];
     isCumulative: boolean = true;
     isRelativeToRecent: boolean = false;
+    periodType: 'const' | 'variable' = 'variable';
     pointRadius: number = 0;
     scales: any | undefined;
 
@@ -17,6 +18,7 @@ class ActivitiesOptions {
         chartTypes: Array<'chars' | 'words'> = ['chars', 'words'],
         isCumulative: boolean = true,
         isRelativeToRecent: boolean = false,
+        periodType: 'const' | 'variable' = 'variable',
         pointRadius: number = 0,
         scales: any | undefined = undefined
     ) {
@@ -25,6 +27,7 @@ class ActivitiesOptions {
         this.chartTypes = chartTypes;
         this.isCumulative = isCumulative;
         this.isRelativeToRecent = isRelativeToRecent;
+        this.periodType = periodType;
         this.pointRadius = pointRadius;
         this.scales = scales;
     }
@@ -39,54 +42,6 @@ export class Api {
         this.activitiesCalc = activitiesCalc;
     }
 
-    public getActivitiesPerPeriod(intervalStr: string): any {
-        const interval = this.activitiesCalc.parseIntervalToMilliseconds(intervalStr);
-        const [segments, minTime, maxTime] = this.activitiesCalc.calculateWordStatsPerPeriod(interval);
-
-        const labels = segments.map((segment, _) => new Date(segment.endTime).toLocaleString());
-        const charCounts = segments.map(segment => segment.totalChars);
-        const wordCounts = segments.map(segment => segment.totalWords);
-
-        const chartData = {
-            type: 'line',
-            data: {
-                labels: labels,
-                datasets: [{
-                    label: 'Total Characters',
-                    data: charCounts,
-                    backgroundColor: ['rgba(255, 99, 132, 0.2)'],
-                    borderColor: ['rgba(255, 99, 132, 1)'],
-                    borderWidth: 1
-                },
-                {
-                    label: 'Total Words',
-                    data: wordCounts,
-                    backgroundColor: ['rgba(54, 162, 235, 0.2)'],
-                    borderColor: ['rgba(54, 162, 235, 1)'],
-                    borderWidth: 1
-                }],
-            },
-            options: {
-                elements: {
-                    point:{
-                        radius: 0
-                    }
-                }
-            },
-            scales: {
-                x: {
-                    type: 'time'
-                },
-                title: {
-                    display: true,
-                    text: 'Date'
-                }
-            }
-        };
-
-        return chartData;
-    }
-
     // 解析每个间隔并调用变周期版本的统计方法
     public getActivities(options: ActivitiesOptions): any {
         const durationMillis  = this.activitiesCalc.parseIntervalToMilliseconds(options.recentDuration);
@@ -94,10 +49,17 @@ export class Api {
         // 计算截止时间
         const cutoffTime = durationMillis === 0 ? 0 : (new Date().getTime()) - durationMillis;
 
-        let segments = this.activitiesCalc.calculateVariablePeriodStats(options.periodsStr, cutoffTime);
+        let segments;
+        
+        if (options.periodType === 'variable') {
+            segments = this.activitiesCalc.calculateVariablePeriodStats(options.periodsStr, options.isCumulative, cutoffTime);
+        }
+        else {
+            segments = this.activitiesCalc.calculateConstPeriodStats(options.periodsStr[0][0], options.isCumulative, cutoffTime);
+        }
 
         // 处理相对偏移
-        if (options.isRelativeToRecent && durationMillis > 0 && segments.length > 0) {
+        if (options.isCumulative && options.isRelativeToRecent && durationMillis > 0 && segments.length > 0) {
             const initialChars = segments[0].totalChars;
             const initialWords = segments[0].totalWords;
             for (let i = 0; i < segments.length; i++) {
