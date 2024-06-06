@@ -114,28 +114,28 @@ export class ActivitiesCalc {
                 // 计算时间段结束时间
                 switch (unit) {
                     case 'min':
-                        endDate = moment(currentDate).add(amount, 'minutes').subtract(1, 'seconds');
+                        endDate = moment(currentDate).add(amount, 'minutes').subtract(1, 'ms');
                         break;
                     case 'hour':
-                        endDate = moment(currentDate).add(amount, 'hours').subtract(1, 'seconds');
+                        endDate = moment(currentDate).add(amount, 'hours').subtract(1, 'ms');
                         break;
                     case 'day':
-                        endDate = moment(currentDate).add(amount, 'days').subtract(1, 'seconds');
+                        endDate = moment(currentDate).add(amount, 'days').subtract(1, 'ms');
                         break;
                     case 'week':
-                        endDate = moment(currentDate).add(amount, 'weeks').subtract(1, 'days');
+                        endDate = moment(currentDate).add(amount, 'weeks').subtract(1, 'ms');
                         break;
                     case 'month':
-                        endDate = moment(currentDate).add(amount, 'months').subtract(1, 'days');
+                        endDate = moment(currentDate).add(amount, 'months').subtract(1, 'ms');
                         break;
                     case 'year':
-                        endDate = moment(currentDate).add(amount, 'years').subtract(1, 'days');
+                        endDate = moment(currentDate).add(amount, 'years').subtract(1, 'ms');
                         break;
                 }
 
                 // 添加时间段
                 segments.push(new TimeSegment(currentDate.toDate().getTime(), endDate.toDate().getTime()));
-                currentDate = moment(endDate).add(1, 'seconds');    // 移至下一周期的开始
+                currentDate = moment(endDate).add(1, 'ms');     // 移至下一周期的开始
             }
         }
     
@@ -144,39 +144,42 @@ export class ActivitiesCalc {
         const lastSegmentIndexes: { [fileId: number]: number } = {};
 
         // 分配事件记录到时间段并更新统计数据
-        eventRecords.forEach(fileEvents => {
-            let initialChars = 0;                               // 记录每个文件在第一个有效时间段的字符数和词数
-            let initialWords = 0;
-            let firstSegmentIndex = -1;                         // 记录每个文件在第一个有效时间段的索引
-            let lastSegmentIndex = 0;                           // 记录每个文件在最后一个有效时间段的索引
-            fileEvents.forEach(event => {
-                // 找到适当的时间段
-                const segmentIndex = segments.findIndex(seg => event.timestamp > seg.startTime && event.timestamp <= seg.endTime);
-                if (segmentIndex < 0) {
-                    return;
-                }
-
-                // 记录第一个有效时间段的字符数和词数
-                if (firstSegmentIndex === -1 && isRelativeToRecent && event.eventType === 'u')
-                {
-                    initialChars = event.charCount;
-                    initialWords = event.wordCount;
-                    firstSegmentIndex = segmentIndex;
-                }
-
-                // 文件数量统计要累积统计
-                if (lastSegmentIndex == 0 && segmentIndex > 0 && event.eventType === 'u') {
-                    for (let i = lastSegmentIndex; i < segmentIndex; i++) {
-                        segments[i].addFileCount(1);
+        if (isCumulative) {
+            eventRecords.forEach(fileEvents => {
+                let initialCheck = false;                           // 是否已经初始化了第一个有效时间段的字符数和词数
+                let initialChars = 0;                               // 记录每个文件在第一个有效时间段的字符数和词数
+                let initialWords = 0;
+                let lastSegmentIndex = 0;                           // 记录每个文件在最后一个有效时间段的索引
+                fileEvents.forEach(event => {
+                    // 找到适当的时间段
+                    const segmentIndex = segments.findIndex(seg => event.timestamp > seg.startTime && event.timestamp <= seg.endTime);
+                    if (segmentIndex < 0) {
+                        return;
                     }
-                } else {
-                    for (let i = lastSegmentIndex; i < segmentIndex; i++) {
-                        segments[i].addFileCount(lastEventStats[event.fileId]?.fileCount || 0);
-                    }
-                }
 
-                // 字数和词数是否要累积统计
-                if (isCumulative) {
+                    // 记录第一个有效时间段的字符数和词数
+                    if (isRelativeToRecent)
+                    {
+                        if (initialCheck === false) {
+                            initialCheck = true;
+                            if (event.eventType != 'c') {
+                                initialChars = event.charCount;
+                                initialWords = event.wordCount;
+                            }
+                        }
+                    }
+
+                    // 文件数量统计要累积统计
+                    if (lastSegmentIndex == 0 && segmentIndex > 0 && event.eventType === 'u') {
+                        for (let i = lastSegmentIndex; i < segmentIndex; i++) {
+                            segments[i].addFileCount(1);
+                        }
+                    } else {
+                        for (let i = lastSegmentIndex; i < segmentIndex; i++) {
+                            segments[i].addFileCount(lastEventStats[event.fileId]?.fileCount || 0);
+                        }
+                    }
+
                     // 初始化或延续之前的统计数据到当前 segment
                     // 对于第一个时间段，如果是更新事件，也需要延续之前的统计数据
                     if (lastSegmentIndex == 0 && segmentIndex > 0 && event.eventType === 'u') {
@@ -191,57 +194,135 @@ export class ActivitiesCalc {
                             );
                         }
                     }
-                } else {
-                    // 需要确保同一个时间段里面的事件只被计算一次
-                    if (lastSegmentIndex != segmentIndex) {
-                        segments[lastSegmentIndex].addCounts(
-                            lastEventStats[event.fileId]?.charCount - initialChars || 0,
-                            lastEventStats[event.fileId]?.wordCount - initialWords || 0
-                        );
+
+                    // 更新当前事件的统计数据
+                    lastEventStats[event.fileId] = { charCount: event.charCount, wordCount: event.wordCount, fileCount: event.eventType === 'd' ? 0 : 1 };
+                    lastSegmentIndex = segmentIndex;
+
+                    // 根据事件类型复位初始字符数和词数
+                    if (isRelativeToRecent) {
+                        if (event.eventType === 'c' || event.eventType === 'd') {
+                            initialChars = 0;
+                            initialWords = 0;
+                        }
                     }
+                    
+                });
+
+                // 处理最后一个事件的字数和词数的相对偏移
+                if (isRelativeToRecent && initialCheck) {
+                    lastEventStats[fileEvents[0].fileId].charCount -= initialChars;
+                    lastEventStats[fileEvents[0].fileId].wordCount -= initialWords;
                 }
 
-                // 更新当前事件的统计数据
-                lastEventStats[event.fileId] = { charCount: event.charCount, wordCount: event.wordCount, fileCount: event.eventType === 'd' ? 0 : 1 };
-                lastSegmentIndex = segmentIndex;
+                // Track the last index per fileId
+                lastSegmentIndexes[fileEvents[0].fileId] = lastSegmentIndex;
             });
 
-            // 处理最后一个事件的字数和词数的相对偏移
-            if (isRelativeToRecent && firstSegmentIndex >= 0) {
-                lastEventStats[fileEvents[0].fileId].charCount -= initialChars;
-                lastEventStats[fileEvents[0].fileId].wordCount -= initialWords;
-            }
+            // 更新最后一个时间段
+            Object.keys(lastEventStats).forEach(fileIdString => {
+                const fileId = Number(fileIdString);
+                const lastSegmentIndex = lastSegmentIndexes[fileId];
+                const stats = lastEventStats[fileId];
 
-            // Track the last index per fileId
-            lastSegmentIndexes[fileEvents[0].fileId] = lastSegmentIndex;
-        });
-
-        // 确保每个时间段都更新到最新
-        Object.keys(lastEventStats).forEach(fileIdString => {
-            const fileId = Number(fileIdString);
-            const lastSegmentIndex = lastSegmentIndexes[fileId];
-            const stats = lastEventStats[fileId];
-
-            // 文件数
-            if (lastSegmentIndex >= 0) {
-                for (let i = lastSegmentIndex; i < segments.length; i++) {
-                    segments[i].addFileCount(stats.fileCount);
-                }
-            }
-
-            // 字数和词数
-            if (isCumulative) {
+                // 文件数
                 if (lastSegmentIndex >= 0) {
                     for (let i = lastSegmentIndex; i < segments.length; i++) {
-                        segments[i].addCounts(stats.charCount, stats.wordCount);
+                        segments[i].addFileCount(stats.fileCount);
                     }
                 }
-            } else {
-                if (lastSegmentIndex >= 0) {
-                    segments[lastSegmentIndex].addCounts(stats.charCount, stats.wordCount);
+
+                // 字数和词数
+                if (isCumulative) {
+                    if (lastSegmentIndex >= 0) {
+                        for (let i = lastSegmentIndex; i < segments.length; i++) {
+                            segments[i].addCounts(stats.charCount, stats.wordCount);
+                        }
+                    }
+                } else {
+                    if (lastSegmentIndex >= 0) {
+                        segments[lastSegmentIndex].addCounts(stats.charCount, stats.wordCount);
+                    }
                 }
-            }
-        });
+            });
+        } else {
+            eventRecords.forEach(fileEvents => {
+                let initialCheck = false;                           // 是否已经初始化了第一个有效时间段的字符数和词数
+                let initialChars = 0;                               // 记录每个文件在第一个有效时间段的字符数和词数
+                let initialWords = 0;
+                let lastSegmentIndex = 0;                           // 记录每个文件在最后一个有效时间段的索引
+                fileEvents.forEach(event => {
+                    // 找到适当的时间段
+                    const segmentIndex = segments.findIndex(seg => event.timestamp > seg.startTime && event.timestamp <= seg.endTime);
+                    if (segmentIndex < 0) {
+                        return;
+                    }
+
+                    // 文件数量统计要累积统计
+                    if (lastSegmentIndex == 0 && segmentIndex > 0 && event.eventType === 'u') {
+                        for (let i = lastSegmentIndex; i < segmentIndex; i++) {
+                            segments[i].addFileCount(1);
+                        }
+                    } else {
+                        for (let i = lastSegmentIndex; i < segmentIndex; i++) {
+                            segments[i].addFileCount(lastEventStats[event.fileId]?.fileCount || 0);
+                        }
+                    }
+
+                    // 减去上一个时间段的统计数据得到增量
+                    if (initialCheck === false) {
+                        initialCheck = true;
+                        if (event.eventType === 'c') {
+                            segments[segmentIndex].addCounts(event.charCount, event.wordCount);
+                        } else {
+                            // 第一个时间段不是创建事件时，假设更新量为0；如果要统计非创建事件，需要从数据库回溯上一个事件
+                            segments[segmentIndex].addCounts(0, 0);
+                        }
+                    } else {
+                        segments[segmentIndex].addCounts(
+                            event.charCount - lastEventStats[event.fileId].charCount,
+                            event.wordCount - lastEventStats[event.fileId].wordCount
+                        );
+                    }
+
+                    // 更新当前事件的统计数据
+                    lastEventStats[event.fileId] = { charCount: event.charCount, wordCount: event.wordCount, fileCount: event.eventType === 'd' ? 0 : 1 };
+                    lastSegmentIndex = segmentIndex;
+
+                    // 根据事件类型复位初始字符数和词数
+                    if (isRelativeToRecent) {
+                        if (event.eventType === 'c' || event.eventType === 'd') {
+                            initialChars = 0;
+                            initialWords = 0;
+                        }
+                    }
+                    
+                });
+
+                // 处理最后一个事件的字数和词数的相对偏移
+                if (isRelativeToRecent && initialCheck) {
+                    lastEventStats[fileEvents[0].fileId].charCount -= initialChars;
+                    lastEventStats[fileEvents[0].fileId].wordCount -= initialWords;
+                }
+
+                // Track the last index per fileId
+                lastSegmentIndexes[fileEvents[0].fileId] = lastSegmentIndex;
+            });
+
+            // 更新最后一个时间段
+            Object.keys(lastEventStats).forEach(fileIdString => {
+                const fileId = Number(fileIdString);
+                const lastSegmentIndex = lastSegmentIndexes[fileId];
+                const stats = lastEventStats[fileId];
+
+                // 文件数
+                if (lastSegmentIndex >= 0) {
+                    for (let i = lastSegmentIndex; i < segments.length; i++) {
+                        segments[i].addFileCount(stats.fileCount);
+                    }
+                }
+            });
+        }
     
         return segments;                                        // 返回填充后的时间段数组
     }
