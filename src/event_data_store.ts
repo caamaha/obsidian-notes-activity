@@ -1,5 +1,5 @@
-// event_data_store.ts
-import { FileRecord, EventRecord, EventType } from './record_datatype';
+// src/event_data_store.ts
+import { FileRecord, EventRecord, EventType } from './record_data_types';
 import logger from './log';
 import Database from '@aidenlx/better-sqlite3';
 

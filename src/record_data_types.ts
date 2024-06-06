@@ -1,4 +1,4 @@
-// record_datatype.ts
+// src/record_data_types.ts
 export class FileRecord {
     id: number;                 // 唯一标识符，可以用于追踪和更新记录
     filePath: string;           // 文件的完整路径

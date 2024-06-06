@@ -1,6 +1,6 @@
 // src/event_aggregator.ts
 import { Vault, TFile } from 'obsidian';
-import { FileRecord, EventRecord, EventType } from "./record_datatype";
+import { FileRecord, EventRecord, EventType } from "./record_data_types";
 import { EventDataStore } from "./event_data_store";
 import { TextAnalyzer } from "./text_analyzer";
 

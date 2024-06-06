@@ -2,7 +2,7 @@
 import { Vault, TFile } from 'obsidian';
 import { TextAnalyzer } from './text_analyzer';
 import { EventDataStore } from './event_data_store';
-import { FileRecord } from './record_datatype';
+import { FileRecord } from './record_data_types';
 import { EventManager } from './event_manager';
 
 export class FileMonitor {

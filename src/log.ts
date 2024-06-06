@@ -1,6 +1,6 @@
 // src/log.ts
 import { Notice } from 'obsidian';
-import { FileRecord, EventType } from './record_datatype';
+import { FileRecord, EventType } from './record_data_types';
 
 class Log
 {
