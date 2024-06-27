@@ -62,8 +62,7 @@ export class EventManager {
     public handleUpdateEventByFilePath(filePath: string): void {
         const fileId = this.dataStore.getFileIdByPath(filePath);
         
-        if (fileId != null)
-        {
+        if (fileId != null) {
             // 如果已存在计时器，先清除
             if (this.modifyTimers.has(fileId)) {
                 clearTimeout(this.modifyTimers.get(fileId));
@@ -76,9 +75,10 @@ export class EventManager {
 
             this.modifyTimers.set(fileId, timer);
         }
-        else
-        {
-            console.error(`File id not found for file path ${filePath}`);
+        else {
+            if (filePath.endsWith('.md')) {
+                console.error(`File id not found for file path ${filePath}`);
+            }
         }
     }
 

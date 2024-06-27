@@ -1,7 +1,10 @@
 // src/event_data_store.ts
 import { FileRecord, EventRecord, EventType } from './record_data_types';
+import { Notice } from 'obsidian';
 import logger from './log';
 import Database from '@aidenlx/better-sqlite3';
+import fs from 'fs';
+import path from 'path';
 
 const binaryPath = "C:\\Users\\Administrator\\AppData\\Roaming\\obsidian\\better-sqlite3-8.0.1-mod.1.node";
 
@@ -9,23 +12,52 @@ export class EventDataStore {
     private db: any;
     private activitiesFetcher: ActivitiesFetcher;
     public fileRecords: FileRecord[] = [];
+    private dbPath: string;
+    private lockFilePath: string;
+    private readOnly: boolean = false;
 
     constructor(dbPath: string) {
-        console.log('Database initialized at:', dbPath);
+        this.dbPath = dbPath;
+        this.lockFilePath = path.join(path.dirname(dbPath), 'db.lock');
         
         // 打开或创建数据库
         this.db = new Database(dbPath, { nativeBinding: binaryPath, fileMustExist: false });
+        
+        this.checkAndSetLock();
         this.createTables();
         this.loadFileRecords();
         this.activitiesFetcher = new ActivitiesFetcher(this.db);
     }
 
+    private checkAndSetLock() {
+        if (fs.existsSync(this.lockFilePath)) {
+            // Lock file exists, open in read-only mode
+            new Notice('Database is currently locked. Check if Obsidian was not closed properly or is running on another device. You may need to manually delete the db.lock file if this is an error.', 10000);
+            this.db = new Database(this.dbPath, { nativeBinding: binaryPath, fileMustExist: true, readonly: true });
+            this.readOnly = true;
+            console.log('Database opened in read-only mode due to existing lock.');
+        } else {
+            // No lock, create lock file and open in write mode
+            fs.writeFileSync(this.lockFilePath, 'locked', { flag: 'w' });
+            this.db = new Database(this.dbPath, { nativeBinding: binaryPath, fileMustExist: false });
+            console.log('Database opened in write mode, lock file created.');
+        }
+    }
+
     close() {
+        // Remove lock file if in write mode
+        if (!this.readOnly) {
+            fs.unlinkSync(this.lockFilePath);
+        }
+
         this.db.close();
         console.log('Database connection closed.');
     }
 
     private createTables() {
+        if (this.readOnly) {
+            return;
+        }
         // 创建 fileRecords 表
         const createFileRecordsTable = `
             CREATE TABLE IF NOT EXISTS fileRecords (
@@ -69,6 +101,11 @@ export class EventDataStore {
     }
 
     public handleFileOps(fileRecord: FileRecord, eventType: EventType): void {
+        if (this.readOnly) {
+            new Notice('Database is currently locked. Check if Obsidian was not closed properly or is running on another device. You may need to manually delete the db.lock file if this is an error.', 5000);
+            return;
+        }
+
         // console.log('handleFileOps: ' + fileRecord.filePath + ' ' + eventType + ' ' + fileRecord.charCount + ' ' + fileRecord.wordCount);
         const existRecord = this.fileRecords.find(r => r.id === fileRecord.id);
         logger.noticeFileOps(fileRecord, existRecord, eventType);
@@ -261,7 +298,7 @@ export class EventDataStore {
         }
     }
 
-    public addEventRecord_FileOps(fileRecord: FileRecord, eventType: EventType): void {
+    private addEventRecord_FileOps(fileRecord: FileRecord, eventType: EventType): void {
         const query = `SELECT * FROM fileRecords WHERE filePath = ?;`;
         const record = this.db.prepare(query).get(fileRecord.filePath);
 
@@ -295,14 +332,13 @@ export class EventDataStore {
         }
     }
     
-    public getFileIdByPath(filePath: string): number {
+    public getFileIdByPath(filePath: string): number | null {
         let record = this.fileRecords.find(r => r.filePath === filePath);
         if (record) {
             return record.id;    
         }
-        else
-        {
-            throw new Error("getFileIdByPath: File not found " + filePath);
+        else {
+            return null;
         }
     }
 

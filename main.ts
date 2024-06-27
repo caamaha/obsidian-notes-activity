@@ -1,5 +1,5 @@
 // main.ts
-import { Plugin } from 'obsidian';
+import { Plugin, EventRef } from 'obsidian';
 import { EventDataStore } from './src/event_data_store';
 import { EventTracker } from './src/event_tracker';
 import { FileMonitor } from './src/file_monitor';
@@ -14,6 +14,7 @@ export default class NoteActivityPlugin extends Plugin {
     private fileMonitor: FileMonitor;
     private activitiesCalc: ActivitiesCalc;
     private api: Api;
+    private quitEventRef: EventRef;
 
     async onload() {
         console.log('\nLoading Note Activity Plugin...');
@@ -41,6 +42,12 @@ export default class NoteActivityPlugin extends Plugin {
             this.registerEvent(this.app.vault.on('modify', (file) => {
                 this.eventTracker.handleFileModify(file.path);
             }));
+        });
+
+        // Register quit event to handle database closure
+        this.quitEventRef = this.app.workspace.on('quit', () => {
+            console.log('Obsidian is quitting... Closing database.');
+            this.eventDataStore.close();
         });
 
         // 提供导出数据的接口
